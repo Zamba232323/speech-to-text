@@ -34,11 +34,25 @@ KEY_TO_VK = {
 
 
 def _get_input_devices():
-    """Return list of audio input devices."""
+    """Return list of audio input devices (WASAPI only to avoid duplicates)."""
     try:
         import sounddevice as sd
+        hostapis = sd.query_hostapis()
+        wasapi_idx = None
+        for i, api in enumerate(hostapis):
+            if "WASAPI" in api["name"]:
+                wasapi_idx = i
+                break
+
         devices = sd.query_devices()
-        return [d for d in devices if d["max_input_channels"] > 0]
+        results = []
+        for d in devices:
+            if d["max_input_channels"] <= 0:
+                continue
+            if wasapi_idx is not None and d["hostapi"] != wasapi_idx:
+                continue
+            results.append(d)
+        return results
     except Exception:
         return []
 
