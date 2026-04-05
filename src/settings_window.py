@@ -176,11 +176,17 @@ class SettingsWindow:
         )
         autostart_cb.pack(anchor="w", pady=(0, 4))
 
-        # Restart warning
+        # Restart warning + button
+        self._restart_frame = ttk.Frame(settings_frame)
         self._restart_label = ttk.Label(
-            settings_frame, text="⚠ Vyžaduje restart aplikace",
+            self._restart_frame, text="⚠ Vyžaduje restart",
             foreground="orange",
         )
+        self._restart_label.pack(side="left")
+        self._restart_btn = ttk.Button(
+            self._restart_frame, text="Restartovat", command=self._restart_app,
+        )
+        self._restart_btn.pack(side="left", padx=(10, 0))
 
         # === INFO ===
         info_frame = ttk.LabelFrame(main, text="Info", padding=10)
@@ -284,7 +290,17 @@ class SettingsWindow:
         ).start()
 
     def _show_restart_warning(self):
-        self._restart_label.pack(anchor="w", pady=(4, 0))
+        self._restart_frame.pack(anchor="w", pady=(4, 0))
+
+    def _restart_app(self):
+        """Restart the application by launching a new instance and quitting."""
+        import subprocess
+        import sys
+        start_bat = os.path.join(REPO_PATH, "start.bat")
+        subprocess.Popen(["cmd", "/c", start_bat], cwd=REPO_PATH)
+        # Quit current instance
+        self._on_close()
+        os._exit(0)
 
     def _run_setup_check(self):
         from setup_check import run_checks
