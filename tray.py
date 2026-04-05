@@ -3,44 +3,37 @@ from PIL import Image, ImageDraw
 import pystray
 
 
-# Icon colors for each state
 COLORS = {
-    "idle": "#888888",       # grey
-    "recording": "#FF0000",  # red
-    "transcribing": "#FFD700",  # yellow
+    "idle": "#888888",
+    "recording": "#FF0000",
+    "transcribing": "#FFD700",
 }
 
 
 def _create_icon_image(color):
-    """Generate a 64x64 microphone icon with the given color."""
     size = 64
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
-    # Microphone body (rounded rectangle approximation)
     draw.rounded_rectangle([20, 8, 44, 36], radius=8, fill=color)
-
-    # Microphone stand arc
     draw.arc([16, 20, 48, 48], start=0, end=180, fill=color, width=3)
-
-    # Stand line
     draw.line([32, 48, 32, 56], fill=color, width=3)
-
-    # Base
     draw.line([24, 56, 40, 56], fill=color, width=3)
-
     return img
 
 
 class TrayApp:
-    def __init__(self, on_setup_check, on_quit):
+    def __init__(self, on_setup_check, on_quit, on_settings=None):
         self._state = "idle"
         self._on_setup_check = on_setup_check
         self._on_quit = on_quit
+        self._on_settings = on_settings
         self._icon = None
 
+    @property
+    def state(self):
+        return self._state
+
     def set_state(self, state):
-        """Update tray icon state: 'idle', 'recording', or 'transcribing'."""
         self._state = state
         if self._icon:
             self._icon.icon = _create_icon_image(COLORS[state])
@@ -52,18 +45,19 @@ class TrayApp:
             self._icon.title = tooltips[state]
 
     def run(self):
-        """Start the tray icon. Blocks the calling thread."""
-        menu = pystray.Menu(
-            pystray.MenuItem("Setup Check", lambda: self._on_setup_check()),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit", lambda: self._on_quit()),
-        )
+        menu_items = []
+        if self._on_settings:
+            menu_items.append(pystray.MenuItem("Nastavení", lambda: self._on_settings()))
+            menu_items.append(pystray.Menu.SEPARATOR)
+        menu_items.append(pystray.MenuItem("Setup Check", lambda: self._on_setup_check()))
+        menu_items.append(pystray.Menu.SEPARATOR)
+        menu_items.append(pystray.MenuItem("Ukončit", lambda: self._on_quit()))
 
         self._icon = pystray.Icon(
             name="speech-to-text",
             icon=_create_icon_image(COLORS["idle"]),
             title="Speech-to-Text — Ready (Ctrl+Space)",
-            menu=menu,
+            menu=pystray.Menu(*menu_items),
         )
         self._icon.run()
 

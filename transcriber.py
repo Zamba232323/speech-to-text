@@ -2,8 +2,10 @@ import os
 import ctypes
 from faster_whisper import WhisperModel
 
-LANGUAGE = "cs"
-INITIAL_PROMPT = "Tento text je v češtině. Používám správnou diakritiku, háčky a čárky."
+INITIAL_PROMPTS = {
+    "cs": "Tento text je v češtině. Používám správnou diakritiku, háčky a čárky.",
+    "en": "This text is in English.",
+}
 
 
 def _has_cuda():
@@ -15,13 +17,15 @@ def _has_cuda():
 
 
 class Transcriber:
-    def __init__(self):
+    def __init__(self, model=None, language="cs"):
+        self._language = language
+
         if _has_cuda():
-            self._model_size = "large-v3"
+            self._model_size = model or "large-v3"
             self._device = "cuda"
             self._compute_type = "float16"
         else:
-            self._model_size = "medium"
+            self._model_size = model or "medium"
             self._device = "cpu"
             self._compute_type = "int8"
 
@@ -42,13 +46,15 @@ class Transcriber:
         return self._device
 
     def transcribe_streaming(self, audio_path, on_segment):
-        """Transcribe audio and call on_segment(text) for each segment as it's ready."""
+        lang = None if self._language == "auto" else self._language
+        prompt = INITIAL_PROMPTS.get(self._language, "")
+
         segments, info = self._model.transcribe(
             audio_path,
-            language=LANGUAGE,
+            language=lang,
             beam_size=5,
             vad_filter=True,
-            initial_prompt=INITIAL_PROMPT,
+            initial_prompt=prompt or None,
         )
 
         prev_text = None
