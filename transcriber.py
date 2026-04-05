@@ -3,6 +3,7 @@ import ctypes
 from faster_whisper import WhisperModel
 
 LANGUAGE = "cs"
+INITIAL_PROMPT = "Tento text je v češtině. Používám správnou diakritiku, háčky a čárky."
 
 
 def _has_cuda():
@@ -20,7 +21,7 @@ class Transcriber:
             self._device = "cuda"
             self._compute_type = "float16"
         else:
-            self._model_size = "small"
+            self._model_size = "medium"
             self._device = "cpu"
             self._compute_type = "int8"
 
@@ -46,6 +47,7 @@ class Transcriber:
             language=LANGUAGE,
             beam_size=5,
             vad_filter=True,
+            initial_prompt=INITIAL_PROMPT,
         )
 
         texts = []
