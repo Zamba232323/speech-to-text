@@ -54,6 +54,13 @@ def _load_cursor_from_file(path):
     return handle
 
 
+def _force_cursor_refresh():
+    """Nudge the cursor position to force Windows to redraw it immediately."""
+    pos = ctypes.wintypes.POINT()
+    user32.GetCursorPos(ctypes.byref(pos))
+    user32.SetCursorPos(pos.x, pos.y)
+
+
 class CursorIndicator:
     def __init__(self):
         self._active = False
@@ -73,6 +80,7 @@ class CursorIndicator:
             # Restore all system cursors to defaults
             user32.SystemParametersInfoW(SPI_SETCURSORS, 0, None, 0)
             self._active = False
+            _force_cursor_refresh()
             self._cleanup_files()
 
     def _set_custom_cursor(self, color):
@@ -84,6 +92,7 @@ class CursorIndicator:
             copy = user32.CopyIcon(handle)
             user32.SetSystemCursor(copy, OCR_NORMAL)
             self._active = True
+            _force_cursor_refresh()
 
     def _cleanup_files(self):
         for f in self._cursor_files:
