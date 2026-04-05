@@ -10,6 +10,7 @@ DEFAULTS = {
     "hotkey_modifier": "ctrl",
     "hotkey_key": "space",
     "autostart": False,
+    "microphone": "",
 }
 
 # Model options with descriptions

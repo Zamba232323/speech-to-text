@@ -42,7 +42,7 @@ def _resolve_hotkey(cfg):
 class SpeechToText:
     def __init__(self):
         self._cfg = load_config()
-        self._recorder = Recorder()
+        self._recorder = Recorder(device=self._resolve_mic())
         self._transcriber = None
         self._cursor = CursorIndicator()
         self._tray = TrayApp(
@@ -52,6 +52,21 @@ class SpeechToText:
         )
         self._busy = False
         self._hotkey_thread_id = None
+
+    def _resolve_mic(self):
+        """Find sounddevice device index from config mic name."""
+        mic_name = self._cfg.get("microphone", "")
+        if not mic_name:
+            return None
+        try:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            for i, d in enumerate(devices):
+                if d["name"] == mic_name and d["max_input_channels"] > 0:
+                    return i
+        except Exception:
+            pass
+        return None
 
     def _ensure_transcriber(self):
         if self._transcriber is None:

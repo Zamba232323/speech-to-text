@@ -33,6 +33,16 @@ KEY_TO_VK = {
 }
 
 
+def _get_input_devices():
+    """Return list of audio input devices."""
+    try:
+        import sounddevice as sd
+        devices = sd.query_devices()
+        return [d for d in devices if d["max_input_channels"] > 0]
+    except Exception:
+        return []
+
+
 def _get_ram_mb():
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / (1024 * 1024)
@@ -150,6 +160,23 @@ class SettingsWindow:
 
         self._model_desc = ttk.Label(model_frame, text=MODELS[self._cfg["model"]]["description"])
         self._model_desc.pack(side="left")
+
+        # Microphone
+        mic_frame = ttk.Frame(settings_frame)
+        mic_frame.pack(fill="x", pady=(0, 8))
+        ttk.Label(mic_frame, text="Mikrofon:").pack(side="left")
+        self._mic_devices = _get_input_devices()
+        mic_names = [d["name"] for d in self._mic_devices]
+        current_mic = self._cfg.get("microphone", "")
+        if current_mic not in mic_names and mic_names:
+            current_mic = mic_names[0]
+        self._mic_var = tk.StringVar(value=current_mic)
+        mic_combo = ttk.Combobox(
+            mic_frame, textvariable=self._mic_var,
+            values=mic_names, state="readonly", width=35,
+        )
+        mic_combo.pack(side="left", padx=(8, 0))
+        mic_combo.bind("<<ComboboxSelected>>", self._on_mic_change)
 
         # Language
         lang_frame = ttk.Frame(settings_frame)
@@ -271,6 +298,12 @@ class SettingsWindow:
         model = self._model_var.get()
         self._cfg["model"] = model
         self._model_desc.config(text=MODELS[model]["description"])
+        save_config(self._cfg)
+        self._show_restart_warning()
+
+    def _on_mic_change(self, event=None):
+        mic_name = self._mic_var.get()
+        self._cfg["microphone"] = mic_name
         save_config(self._cfg)
         self._show_restart_warning()
 

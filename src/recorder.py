@@ -10,10 +10,11 @@ DTYPE = "int16"
 
 
 class Recorder:
-    def __init__(self):
+    def __init__(self, device=None):
         self._frames = []
         self._recording = False
         self._lock = threading.Lock()
+        self._device = device
 
     @property
     def is_recording(self):
@@ -29,6 +30,7 @@ class Recorder:
                 samplerate=SAMPLE_RATE,
                 channels=CHANNELS,
                 dtype=DTYPE,
+                device=self._device,
                 callback=self._audio_callback,
             )
             self._stream.start()
