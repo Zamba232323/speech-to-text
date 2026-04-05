@@ -1,103 +1,83 @@
 import ctypes
 import ctypes.wintypes
-import tempfile
-import os
-from PIL import Image, ImageDraw
+import threading
+import tkinter as tk
+
+GWL_EXSTYLE = -20
+WS_EX_TRANSPARENT = 0x00000020
+WS_EX_LAYERED = 0x00080000
+WS_EX_TOOLWINDOW = 0x00000080
 
 user32 = ctypes.windll.user32
 
-# Windows cursor IDs
-OCR_NORMAL = 32512
-OCR_APPSTARTING = 32650
-
-# SetSystemCursor replaces a system cursor until SPI_SETCURSORS restores all
-SPI_SETCURSORS = 0x0057
-
-
-def _create_cursor_file(color, size=32):
-    """Create a .cur file with a colored circle next to the normal arrow."""
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    # Draw arrow pointer (simplified)
-    arrow_points = [
-        (0, 0), (0, 20), (5, 16), (9, 24), (12, 23), (8, 15), (14, 14)
-    ]
-    draw.polygon(arrow_points, fill="white", outline="black")
-
-    # Draw colored circle indicator (bottom-right of cursor)
-    circle_x, circle_y = 16, 16
-    circle_r = 7
-    draw.ellipse(
-        [circle_x - circle_r, circle_y - circle_r,
-         circle_x + circle_r, circle_y + circle_r],
-        fill=color, outline="black", width=1,
-    )
-
-    # Save as .cur (Windows .ico format works as .cur with hotspot 0,0)
-    tmp = tempfile.NamedTemporaryFile(suffix=".cur", delete=False, dir=tempfile.gettempdir())
-    # Save as ICO which Windows can load as cursor
-    img.save(tmp.name, format="ICO", sizes=[(size, size)])
-    tmp.close()
-    return tmp.name
-
-
-def _load_cursor_from_file(path):
-    """Load a cursor from a .cur/.ico file."""
-    IMAGE_CURSOR = 2
-    LR_LOADFROMFILE = 0x0010
-    LR_DEFAULTSIZE = 0x0040
-    handle = user32.LoadImageW(
-        None, path, IMAGE_CURSOR, 0, 0,
-        LR_LOADFROMFILE | LR_DEFAULTSIZE,
-    )
-    return handle
-
-
-def _force_cursor_refresh():
-    """Nudge the cursor position to force Windows to redraw it immediately."""
-    pos = ctypes.wintypes.POINT()
-    user32.GetCursorPos(ctypes.byref(pos))
-    user32.SetCursorPos(pos.x, pos.y)
-
 
 class CursorIndicator:
+    """Small colored circle overlay that follows the mouse cursor."""
+
     def __init__(self):
-        self._active = False
-        self._cursor_files = []
+        self._root = None
+        self._canvas = None
+        self._thread = None
+        self._color = None
+        self._visible = False
+        self._lock = threading.Lock()
+        self._ready = threading.Event()
+        self._start_ui_thread()
+
+    def _start_ui_thread(self):
+        self._thread = threading.Thread(target=self._ui_loop, daemon=True)
+        self._thread.start()
+        self._ready.wait(timeout=5)
+
+    def _ui_loop(self):
+        self._root = tk.Tk()
+        self._root.withdraw()
+        self._root.overrideredirect(True)
+        self._root.attributes("-topmost", True)
+        self._root.attributes("-transparentcolor", "#010101")
+
+        size = 22
+        self._canvas = tk.Canvas(
+            self._root, width=size, height=size,
+            bg="#010101", highlightthickness=0,
+        )
+        self._canvas.pack()
+        self._circle_id = self._canvas.create_oval(
+            3, 3, size - 3, size - 3, fill="red", outline="black", width=1,
+        )
+
+        # Make window click-through
+        self._root.update_idletasks()
+        hwnd = user32.GetParent(self._root.winfo_id())
+        style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        user32.SetWindowLongW(
+            hwnd, GWL_EXSTYLE,
+            style | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        )
+
+        self._ready.set()
+        self._follow_mouse()
+        self._root.mainloop()
+
+    def _follow_mouse(self):
+        if self._visible:
+            pos = ctypes.wintypes.POINT()
+            user32.GetCursorPos(ctypes.byref(pos))
+            self._root.geometry(f"+{pos.x + 18}+{pos.y + 18}")
+            self._root.deiconify()
+        else:
+            self._root.withdraw()
+        self._root.after(30, self._follow_mouse)
 
     def set_recording(self):
-        """Change cursor to show red circle (recording)."""
-        self._set_custom_cursor("#FF0000")
+        self._ready.wait()
+        self._canvas.itemconfig(self._circle_id, fill="#FF0000")
+        self._visible = True
 
     def set_transcribing(self):
-        """Change cursor to show yellow circle (transcribing)."""
-        self._set_custom_cursor("#FFD700")
+        self._ready.wait()
+        self._canvas.itemconfig(self._circle_id, fill="#FFD700")
+        self._visible = True
 
     def set_idle(self):
-        """Restore normal cursor."""
-        if self._active:
-            # Restore all system cursors to defaults
-            user32.SystemParametersInfoW(SPI_SETCURSORS, 0, None, 0)
-            self._active = False
-            _force_cursor_refresh()
-            self._cleanup_files()
-
-    def _set_custom_cursor(self, color):
-        cur_path = _create_cursor_file(color)
-        self._cursor_files.append(cur_path)
-        handle = _load_cursor_from_file(cur_path)
-        if handle:
-            # CopyIcon so the handle survives SetSystemCursor (which destroys the input)
-            copy = user32.CopyIcon(handle)
-            user32.SetSystemCursor(copy, OCR_NORMAL)
-            self._active = True
-            _force_cursor_refresh()
-
-    def _cleanup_files(self):
-        for f in self._cursor_files:
-            try:
-                os.remove(f)
-            except OSError:
-                pass
-        self._cursor_files = []
+        self._visible = False

@@ -1,25 +1,25 @@
 import sys
 import ctypes
 import threading
+import time
 from pynput import keyboard
 
 from recorder import Recorder
 from transcriber import Transcriber
-from injector import StreamingInjector
+from injector import inject_text
 from tray import TrayApp
 from cursor_indicator import CursorIndicator
 from setup_check import run_checks
 
 MUTEX_NAME = "Global\\SpeechToTextMutex_7f3a9b"
+BACKGROUND_TRANSCRIBE_INTERVAL = 5  # seconds between background transcriptions
 
 
 def _acquire_single_instance():
-    """Prevent multiple instances using a Windows named mutex."""
     kernel32 = ctypes.windll.kernel32
     mutex = kernel32.CreateMutexW(None, True, MUTEX_NAME)
     last_error = ctypes.get_last_error()
-    ERROR_ALREADY_EXISTS = 183
-    if last_error == ERROR_ALREADY_EXISTS:
+    if last_error == 183:  # ERROR_ALREADY_EXISTS
         kernel32.CloseHandle(mutex)
         return None
     return mutex
@@ -28,13 +28,16 @@ def _acquire_single_instance():
 class SpeechToText:
     def __init__(self):
         self._recorder = Recorder()
-        self._transcriber = None  # lazy-loaded
+        self._transcriber = None
         self._cursor = CursorIndicator()
         self._tray = TrayApp(
             on_setup_check=self._handle_setup_check,
             on_quit=self._handle_quit,
         )
-        self._busy = False  # True while transcribing
+        self._busy = False
+        self._buffered_text = []
+        self._bg_thread = None
+        self._bg_stop = threading.Event()
 
     def _ensure_transcriber(self):
         if self._transcriber is None:
@@ -44,18 +47,30 @@ class SpeechToText:
             self._cursor.set_idle()
             self._tray.set_state("idle")
 
+    def _background_transcribe(self):
+        """Periodically transcribe audio snapshots while recording."""
+        while not self._bg_stop.wait(BACKGROUND_TRANSCRIBE_INTERVAL):
+            if not self._recorder.is_recording:
+                break
+            snapshot_path = self._recorder.snapshot()
+            if snapshot_path:
+                self._transcriber.transcribe_streaming(
+                    snapshot_path, lambda t: None  # discard, just warm cache
+                )
+
     def _handle_hotkey(self):
         if self._busy:
             return
 
         if not self._recorder.is_recording:
-            # Start recording
+            # === START RECORDING ===
             self._ensure_transcriber()
+            self._buffered_text = []
             self._recorder.start()
             self._cursor.set_recording()
             self._tray.set_state("recording")
         else:
-            # Stop recording and transcribe
+            # === STOP RECORDING & INJECT ===
             audio_path = self._recorder.stop()
             if audio_path is None:
                 self._cursor.set_idle()
@@ -68,11 +83,13 @@ class SpeechToText:
 
             def process():
                 try:
-                    injector = StreamingInjector()
+                    segments = []
                     self._transcriber.transcribe_streaming(
-                        audio_path, injector.inject_segment
+                        audio_path, segments.append
                     )
-                    injector.finish()
+                    full_text = " ".join(segments)
+                    if full_text.strip():
+                        inject_text(full_text.strip())
                 finally:
                     self._busy = False
                     self._cursor.set_idle()
@@ -90,7 +107,6 @@ class SpeechToText:
         self._tray.stop()
 
     def run(self):
-        # Register global hotkey Ctrl+Space
         hotkey = keyboard.HotKey(
             keyboard.HotKey.parse("<ctrl>+<space>"),
             self._handle_hotkey,
@@ -107,8 +123,6 @@ class SpeechToText:
             on_release=on_release,
         )
         self._listener.start()
-
-        # Run tray (blocks main thread)
         self._tray.run()
 
 

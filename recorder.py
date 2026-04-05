@@ -33,6 +33,13 @@ class Recorder:
             )
             self._stream.start()
 
+    def snapshot(self):
+        """Return a WAV file of audio recorded so far, without stopping."""
+        with self._lock:
+            if not self._frames:
+                return None
+            return self._save_frames(list(self._frames))
+
     def stop(self):
         with self._lock:
             if not self._recording:
@@ -44,16 +51,18 @@ class Recorder:
             if not self._frames:
                 return None
 
-            # Save to temp WAV file
-            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            with wave.open(tmp.name, "wb") as wf:
-                wf.setnchannels(CHANNELS)
-                wf.setsampwidth(2)  # 16-bit = 2 bytes
-                wf.setframerate(SAMPLE_RATE)
-                wf.writeframes(np.concatenate(self._frames).tobytes())
-
+            path = self._save_frames(self._frames)
             self._frames = []
-            return tmp.name
+            return path
+
+    def _save_frames(self, frames):
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        with wave.open(tmp.name, "wb") as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(2)
+            wf.setframerate(SAMPLE_RATE)
+            wf.writeframes(np.concatenate(frames).tobytes())
+        return tmp.name
 
     def _audio_callback(self, indata, frames, time, status):
         if self._recording:
