@@ -1,8 +1,7 @@
 import sys
 import ctypes
+import ctypes.wintypes
 import threading
-import time
-from pynput import keyboard
 
 from recorder import Recorder
 from transcriber import Transcriber
@@ -12,7 +11,14 @@ from cursor_indicator import CursorIndicator
 from setup_check import run_checks
 
 MUTEX_NAME = "Global\\SpeechToTextMutex_7f3a9b"
-BACKGROUND_TRANSCRIBE_INTERVAL = 5  # seconds between background transcriptions
+
+user32 = ctypes.windll.user32
+
+# Windows hotkey constants
+MOD_CONTROL = 0x0002
+VK_SPACE = 0x20
+WM_HOTKEY = 0x0312
+HOTKEY_ID = 1
 
 
 def _acquire_single_instance():
@@ -35,9 +41,6 @@ class SpeechToText:
             on_quit=self._handle_quit,
         )
         self._busy = False
-        self._buffered_text = []
-        self._bg_thread = None
-        self._bg_stop = threading.Event()
 
     def _ensure_transcriber(self):
         if self._transcriber is None:
@@ -47,17 +50,6 @@ class SpeechToText:
             self._cursor.set_idle()
             self._tray.set_state("idle")
 
-    def _background_transcribe(self):
-        """Periodically transcribe audio snapshots while recording."""
-        while not self._bg_stop.wait(BACKGROUND_TRANSCRIBE_INTERVAL):
-            if not self._recorder.is_recording:
-                break
-            snapshot_path = self._recorder.snapshot()
-            if snapshot_path:
-                self._transcriber.transcribe_streaming(
-                    snapshot_path, lambda t: None  # discard, just warm cache
-                )
-
     def _handle_hotkey(self):
         if self._busy:
             return
@@ -65,7 +57,6 @@ class SpeechToText:
         if not self._recorder.is_recording:
             # === START RECORDING ===
             self._ensure_transcriber()
-            self._buffered_text = []
             self._recorder.start()
             self._cursor.set_recording()
             self._tray.set_state("recording")
@@ -104,25 +95,27 @@ class SpeechToText:
         if self._recorder.is_recording:
             self._recorder.stop()
         self._cursor.set_idle()
+        # Unregister hotkey before stopping
+        user32.UnregisterHotKey(None, HOTKEY_ID)
         self._tray.stop()
 
+    def _hotkey_listener(self):
+        """Windows message loop for global hotkey — runs in its own thread."""
+        if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_CONTROL, VK_SPACE):
+            print("ERROR: Could not register Ctrl+Space hotkey. Is another instance running?")
+            return
+
+        msg = ctypes.wintypes.MSG()
+        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
+            if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
+                self._handle_hotkey()
+
     def run(self):
-        hotkey = keyboard.HotKey(
-            keyboard.HotKey.parse("<ctrl>+<space>"),
-            self._handle_hotkey,
-        )
+        # Start hotkey listener in background thread
+        hotkey_thread = threading.Thread(target=self._hotkey_listener, daemon=True)
+        hotkey_thread.start()
 
-        def on_press(key):
-            hotkey.press(self._listener.canonical(key))
-
-        def on_release(key):
-            hotkey.release(self._listener.canonical(key))
-
-        self._listener = keyboard.Listener(
-            on_press=on_press,
-            on_release=on_release,
-        )
-        self._listener.start()
+        # Run tray in main thread (blocks)
         self._tray.run()
 
 
