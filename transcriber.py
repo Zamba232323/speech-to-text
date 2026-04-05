@@ -17,7 +17,7 @@ def _has_cuda():
 class Transcriber:
     def __init__(self):
         if _has_cuda():
-            self._model_size = "medium"
+            self._model_size = "large-v3"
             self._device = "cuda"
             self._compute_type = "float16"
         else:
