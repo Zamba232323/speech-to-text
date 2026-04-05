@@ -5,7 +5,7 @@ from pynput import keyboard
 
 from recorder import Recorder
 from transcriber import Transcriber
-from injector import inject_text
+from injector import StreamingInjector
 from tray import TrayApp
 from cursor_indicator import CursorIndicator
 from setup_check import run_checks
@@ -68,9 +68,11 @@ class SpeechToText:
 
             def process():
                 try:
-                    text = self._transcriber.transcribe(audio_path)
-                    if text:
-                        inject_text(text)
+                    injector = StreamingInjector()
+                    self._transcriber.transcribe_streaming(
+                        audio_path, injector.inject_segment
+                    )
+                    injector.finish()
                 finally:
                     self._busy = False
                     self._cursor.set_idle()

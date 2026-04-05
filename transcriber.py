@@ -41,7 +41,8 @@ class Transcriber:
     def device(self):
         return self._device
 
-    def transcribe(self, audio_path):
+    def transcribe_streaming(self, audio_path, on_segment):
+        """Transcribe audio and call on_segment(text) for each segment as it's ready."""
         segments, info = self._model.transcribe(
             audio_path,
             language=LANGUAGE,
@@ -50,18 +51,17 @@ class Transcriber:
             initial_prompt=INITIAL_PROMPT,
         )
 
-        texts = []
+        prev_text = None
         for segment in segments:
             text = segment.text.strip()
             if not text:
                 continue
-            if texts and text == texts[-1]:
+            if text == prev_text:
                 continue
-            texts.append(text)
+            prev_text = text
+            on_segment(text)
 
         try:
             os.remove(audio_path)
         except OSError:
             pass
-
-        return " ".join(texts)
