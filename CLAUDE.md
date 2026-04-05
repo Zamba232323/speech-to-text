@@ -10,26 +10,28 @@ Windows desktop nástroj pro diktování textu kamkoli pomocí Ctrl+Space. Nahra
 2. Mluv česky, klidně přepni okno, brouzdej...
 3. **Ctrl+Space** → zastaví nahrávání, přepíše audio, vloží text tam kde je kurzor
 
-## Architektura
+## Struktura
 
-- `stt.py` — hlavní entry point, orchestrace všech komponent
-- `recorder.py` — nahrávání z mikrofonu (16kHz mono WAV, sounddevice)
-- `transcriber.py` — Whisper přepis (faster-whisper, auto GPU/CPU detekce)
-- `injector.py` — vložení textu na pozici kurzoru (clipboard + Ctrl+V)
-- `tray.py` — system tray ikona s menu (pystray)
-- `cursor_indicator.py` — plovoucí kolečko u kurzoru (tkinter overlay, click-through)
-- `setup_check.py` — diagnostika prostředí (Python, balíčky, mikrofon, CUDA)
-- `install.bat` — instalace: venv + deps + setup check + nabídka autostartu
-- `start.bat` — spuštění aplikace
+Veškerý Python kód je v `src/`. Root obsahuje jen skripty a config.
+
+- `src/stt.py` — hlavní entry point, orchestrace všech komponent
+- `src/recorder.py` — nahrávání z mikrofonu (16kHz mono WAV, sounddevice)
+- `src/transcriber.py` — Whisper přepis (faster-whisper, auto GPU/CPU detekce)
+- `src/injector.py` — vložení textu na pozici kurzoru (clipboard + Ctrl+V)
+- `src/tray.py` — system tray ikona s menu (pystray)
+- `src/cursor_indicator.py` — plovoucí kolečko u kurzoru (tkinter overlay, click-through)
+- `src/settings_window.py` — okno nastavení (tkinter)
+- `src/setup_check.py` — diagnostika prostředí (Python, balíčky, mikrofon, CUDA)
+- `src/config.py` — správa konfigurace (config.json v rootu, per-PC, gitignored)
 
 ## Klíčová rozhodnutí
 
-- **Jazyk přepisu:** čeština (`cs`), hardcoded
-- **Model:** `medium` vždy (i na CPU), kvalita > rychlost
+- **Model:** `large-v3` na GPU, `medium` na CPU — konfigurovatelné v nastavení
+- **Jazyk:** výchozí čeština, měnitelný v nastavení (cs/en/auto)
 - **Hotkey:** Windows RegisterHotKey API (ne pynput — to selhávalo při přepínání oken)
 - **Kurzor indikátor:** tkinter overlay okno (ne SetSystemCursor — to způsobovalo mizení kurzoru)
 - **Single instance:** Windows named mutex
-- **Flow:** nahrávání → přepis na pozadí → vložení textu až při zastavení (ne průběžně)
+- **Flow:** nahrávání → přepis po zastavení → vložení textu na pozici kurzoru
 
 ## Instalace na novém PC
 

@@ -46,7 +46,7 @@ if %ERRORLEVEL% neq 0 (
 
 echo [3/4] Kontroluji prostredi...
 echo.
-python setup_check.py
+python src\setup_check.py
 echo.
 
 echo [4/4] Autostart

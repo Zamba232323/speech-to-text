@@ -7,7 +7,7 @@ import psutil
 from config import load_config, save_config, MODELS, LANGUAGES, _has_cuda
 
 VERSION = "1.0.0"
-REPO_PATH = os.path.dirname(os.path.abspath(__file__))
+REPO_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Windows hotkey modifier codes
 MODIFIER_MAP = {

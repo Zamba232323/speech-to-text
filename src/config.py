@@ -2,7 +2,7 @@ import json
 import os
 import ctypes
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config.json")
 
 DEFAULTS = {
     "model": None,  # auto-detected
